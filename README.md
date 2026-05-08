@@ -99,6 +99,7 @@ For the best performance, please build your Bimanual YAM setup following the ref
 ![Bimanual YAM setup](assets/m.png)
 
 All required components can be purchased using this [Bimanual YAM parts list](https://docs.google.com/spreadsheets/d/10bg4XJoeIqnuOBLpUlkhJV6QEYn_oK5IZVm5C7_kdbo/edit?usp=sharing).
+
 Implementation code for setting up, data collection, and inference for Bimanual YAM is [here](https://github.com/williamtsai726/YAM)
 
 ### Franka Setup
