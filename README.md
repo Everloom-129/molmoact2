@@ -30,6 +30,9 @@
   <a href="https://huggingface.co/collections/allenai/molmo2-er-datasets-69f8d605d92d46a5fc24ced2">
     <img alt="ER Datasets" src="https://img.shields.io/badge/HF-ER%20Datasets-yellow?logo=huggingface">
   </a>
+  <a href="https://molmospaces.allen.ai/leaderboard">
+    <img alt="1st VLA on MolmoSpace" src="https://img.shields.io/badge/MolmoSpace-Top%20VLA-success?logo=trophy&logoColor=white">
+  </a>
 </p>
 
 MolmoAct2 is Ai2's open family of action reasoning models for robot control and real-world deployment. It builds on the Molmo2-ER embodied-reasoning vision-language backbone, adds robot state and action modeling, and connects the VLM to a flow-matching continuous action expert for closed-loop manipulation. The release includes base checkpoints for continued training, fine-tuned robot policies for evaluation and deployment, and the datasets used to build MolmoAct2 and Molmo2-ER.
