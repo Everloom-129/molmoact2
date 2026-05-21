@@ -20,6 +20,7 @@ dependencies = [
     "fastapi>=0.116",
     "uvicorn[standard]>=0.35",
     "json-numpy>=2.1.0",
+    "prometheus-client>=0.20",
 ]
 
 [tool.uv]

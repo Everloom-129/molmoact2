@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the MolmoAct2 release repo. The tracked code under this working directory is:
 
+- `examples/_common/server.py` — shared scaffolding (bf16 patches, FastAPI app factory with async-dispatched `/act`, `/healthz`, `/metrics`, `BasePolicy`, warmup helper, Prometheus metrics). Each embodiment server subclasses `BasePolicy` and supplies a payload extractor.
 - `examples/droid/host_server_droid.py` — FastAPI inference server for `allenai/MolmoAct2-DROID` (2 cams, 8-D state, `norm_tag="franka_droid"`, default port 8000).
 - `examples/yam/host_server_yam.py` — same shape, but for `allenai/MolmoAct2-BimanualYAM` (3 cams `[top, left, right]`, 14-D state, `norm_tag="yam_dual_molmoact2"`, default port 8202).
 
@@ -33,6 +34,7 @@ uv run hf download allenai/MolmoAct2-DROID                                 # pre
 uv run hf download allenai/MolmoAct2-BimanualYAM                           # pre-cache YAM   (~21 GB)
 curl http://<host>:8000/act                                                # DROID health
 curl http://<host>:8202/act                                                # YAM   health
+curl http://<host>:8000/metrics                                            # Prometheus exposition
 ```
 
 Useful server flags: `--dtype {bfloat16,float16,float32}` (default bf16; fp32 needs ~96 GB VRAM), `--device cuda:0`, `--cuda-graph` (~2× faster action expert, +~2 GB VRAM, not safe under concurrent calls), `--no-warmup`.
@@ -57,11 +59,11 @@ YAM (`examples/yam/host_server_yam.py`):
 
 ## Server architecture — non-obvious bits
 
-The MolmoAct2 checkpoints were not released with `bfloat16` or local-snapshot loading in mind. Both `examples/droid/host_server_droid.py` and `examples/yam/host_server_yam.py` apply the same set of upstream workarounds; future changes need to preserve these or a server will silently break:
+The MolmoAct2 checkpoints were not released with `bfloat16` or local-snapshot loading in mind. The shared scaffolding in `examples/_common/server.py` applies the same set of upstream workarounds; future changes need to preserve these or both servers will silently break:
 
-1. **Snapshot-dir loading.** The model's `predict_action` reads `norm_stats.json` from `config._name_or_path`. Loading by repo id leaves that as a non-path string and crashes at inference time. The server always resolves `snapshot_download(repo_id)` and loads from the local directory.
+1. **Snapshot-dir loading.** The model's `predict_action` reads `norm_stats.json` from `config._name_or_path`. Loading by repo id leaves that as a non-path string and crashes at inference time. `BasePolicy.__init__` always resolves `snapshot_download(repo_id)` and loads from the local directory, and stashes the snapshot SHA on `policy.revision` so it can be surfaced on the `/act` health response.
 
-2. **bf16 patches to upstream `modeling_molmoact2.py`.** `_patch_modeling_for_bf16` rewrites the cached `modeling_molmoact2.py` (both in the snapshot dir and in `~/.cache/huggingface/modules/transformers_modules/*/`, which is the copy `trust_remote_code` actually imports) at startup. Two edits, both idempotent and marked with `# patched_bf16_*` comments:
+2. **bf16 patches to upstream `modeling_molmoact2.py`.** `patch_modeling_for_bf16` rewrites the cached `modeling_molmoact2.py` (both in the snapshot dir and in `~/.cache/huggingface/modules/transformers_modules/*/`, which is the copy `trust_remote_code` actually imports) at startup. Two edits, both idempotent and marked with `# patched_bf16_*` comments:
    - Flow-matching trajectory dtype: hardcoded `torch.float32` → `source_tensor.dtype`.
    - `_to_array`: cast to fp32 before `.numpy()` because numpy has no bf16 dtype.
 
@@ -69,13 +71,19 @@ The MolmoAct2 checkpoints were not released with `bfloat16` or local-snapshot lo
 
 3. **`tokenizer_config.json` ships `extra_special_tokens` as a list.** transformers ≥4.46 expects a dict and crashes with `'list' object has no attribute 'keys'`. `AutoProcessor.from_pretrained(..., extra_special_tokens={})` overrides it; the model code only looks these up via `convert_tokens_to_ids` so the empty dict is safe.
 
-4. **Per-instance `_move_inputs_to_device` override.** Upstream moves tensors to the device but doesn't cast floats to the model dtype. With bf16 weights the processor's fp32 `pixel_values` then trips `mat1 and mat2 must have the same dtype`. `Policy.__init__` replaces the bound method with a version that casts floating-point tensors to the model dtype after the device move.
+4. **Per-instance `_move_inputs_to_device` override.** Upstream moves tensors to the device but doesn't cast floats to the model dtype. With bf16 weights the processor's fp32 `pixel_values` then trips `mat1 and mat2 must have the same dtype`. `BasePolicy.__init__` replaces the bound method with a version that casts floating-point tensors to the model dtype after the device move.
 
-5. **Coarse lock around `predict_action`.** Robot clients poll at ~5 Hz and the action-expert CUDA graphs are not safe under concurrent calls — keep the `threading.Lock()` even if it looks unnecessary.
+5. **Coarse lock around `predict_action`.** Robot clients poll at ~5 Hz and the action-expert CUDA graphs are not safe under concurrent calls — `BasePolicy._lock` serializes inference even when multiple HTTP clients are connected.
+
+6. **POST `/act` dispatches inference to a worker thread.** The FastAPI route is `async def` but calls `policy.predict(...)` through `asyncio.to_thread`, so a ~80 ms inference does not block the event loop — `/healthz` and `/metrics` stay responsive while the GPU is busy. The internal `_lock` still serializes the GPU.
+
+7. **CUDA-graph capture is a startup-only decision.** The `--cuda-graph` flag is captured into `policy.default_cuda_graph` and the per-request `enable_cuda_graph` field is ignored on purpose. Mid-episode capture toggles cost a VRAM allocation and a latency spike.
+
+8. **Prometheus metrics live in `_common/server.py`.** Counters and a latency histogram, all labeled by embodiment, plus GPU memory gauges that are sampled lazily on every `/metrics` scrape. Each embodiment process is its own metric source — point Prometheus at every host:port pair.
 
 ## Conventions for changes
 
-- Each `examples/<embodiment>/host_server_*.py` is the source of truth for its embodiment's `/act` schema, `NORM_TAG`, and state/camera count. New deployments (SO-100/101, LIBERO) should clone the same template into a new sibling directory and override those constants — don't try to multiplex embodiments behind one server.
-- `predict_action`'s mode kwarg differs across checkpoints: the DROID revision uses `action_mode="continuous"` (defaulted), the YAM revision uses `inference_action_mode="continuous"` (required, no default). Each server must use its checkpoint's name — copying the call site verbatim between embodiments will TypeError at warmup.
-- Don't edit the cached `modeling_molmoact2.py` directly — extend `_patch_modeling_for_bf16` so the change survives a cache rebuild. The two textual needles only match the DROID snapshot revision: on DROID, `patched_bf16_dtype` no longer matches but `patched_bf16_to_array` still applies; on YAM, both are already fixed upstream and warn "needle not found" — bf16 inference works regardless. Keep the patch code in place so re-downloads of older snapshots still work.
+- Each `examples/<embodiment>/host_server_*.py` is the source of truth for its embodiment's `/act` schema, `NORM_TAG`, and state/camera count. New deployments (SO-100/101, LIBERO) should clone the same template into a new sibling directory, subclass `BasePolicy`, and override those constants — don't try to multiplex embodiments behind one server, and don't put embodiment-specific schema knowledge into `_common/server.py`.
+- `predict_action`'s mode kwarg differs across checkpoints: the DROID revision uses `action_mode="continuous"` (defaulted), the YAM revision uses `inference_action_mode="continuous"` (required, no default). Set `MODE_KWARG` on the subclass — copying it verbatim between embodiments will TypeError at warmup.
+- Don't edit the cached `modeling_molmoact2.py` directly — extend `patch_modeling_for_bf16` in `_common/server.py` so the change survives a cache rebuild. The two textual needles only match the DROID snapshot revision: on DROID, `patched_bf16_dtype` no longer matches but `patched_bf16_to_array` still applies; on YAM, both are already fixed upstream and warn "needle not found" — bf16 inference works regardless. Keep the patch code in place so re-downloads of older snapshots still work.
 - `logs/inference_script.py` is the DROID Polymetis client bridge (untracked in this branch). It depends on `pyzed.sl`, `cv2`, `requests`, `json_numpy`, and optionally `pandas` for Excel logging — don't introduce server-only deps into it, and don't assume future contributors will have the file.
