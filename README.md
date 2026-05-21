@@ -30,14 +30,19 @@
   <a href="https://huggingface.co/collections/allenai/molmo2-er-datasets-69f8d605d92d46a5fc24ced2">
     <img alt="ER Datasets" src="https://img.shields.io/badge/HF-ER%20Datasets-yellow?logo=huggingface">
   </a>
+  <a href="https://molmospaces.allen.ai/leaderboard">
+    <img alt="1st VLA on MolmoSpace" src="https://img.shields.io/badge/MolmoSpace-1st%20VLA-success?logo=trophy&logoColor=gold">
+  </a>
 </p>
 
 MolmoAct2 is Ai2's open family of action reasoning models for robot control and real-world deployment. It builds on the Molmo2-ER embodied-reasoning vision-language backbone, adds robot state and action modeling, and connects the VLM to a flow-matching continuous action expert for closed-loop manipulation. The release includes base checkpoints for continued training, fine-tuned robot policies for evaluation and deployment, and the datasets used to build MolmoAct2 and Molmo2-ER.
 
 ---
 ### Updates
+- **[2026/05/19]** 🔥 We've also released MolmoAct2-Cortex evaluation rollouts on YAM bimanual setups (useful for failure annotation and reward model training) at [**Policy Rollouts**](https://huggingface.co/collections/allenai/molmoact2-eval-rollouts).
+- **[2026/05/17]** 🔥 We have released FastAPI inference servers for MolmoAct2 using DROID and YAM setups at [**Inference Servers**](#5-inference-servers) (implemented by [Jie Wang](https://github.com/Everloom-129)).
 - **[2026/05/14]** 🔥 We have released MolmoAct2 lerobot workflow for fine-tuning and inference. [**Check it out**](https://github.com/allenai/lerobot/tree/molmoact2-policy). 
-- **[2025/05/06]** 🔥 Detail implementation and setup for Franka, SO-100/101, and bimanual YAM have been released at  [**2 Real-world Deployment**](#2-real-world-deployment).
+- **[2025/05/06]** 🔥 Detail implementation and setup for Franka, SO-100/101, and bimanual YAM have been released at  [**Real-world Deployment**](#4-real-world-deployment).
 - **[2026/05/05] 🔥 [MolmoAct2]([https://huggingface.co/collections/allenai/molmoact-689697591a3936fba38174d7](https://allenai.org/blog/molmoact2))** has been released!
 
 
@@ -66,7 +71,7 @@ We also provide fine-tuned checkpoints for common robot platforms and benchmarks
 | MolmoAct2-LIBERO | Inference / Fine-tuning | MolmoAct2 fine-tuned on the full LIBERO training mixture, combining Spatial, Object, Goal, and Long suites. | https://huggingface.co/allenai/MolmoAct2-LIBERO |
 | MolmoAct2-Think-LIBERO | Inference / Fine-tuning | MolmoAct2-Think fine-tuned on LIBERO with depth-and-action examples and adaptive depth reasoning. | https://huggingface.co/allenai/MolmoAct2-Think-LIBERO |
 
-## Datasets
+## 2. Datasets
 
 | Data | Description | Dataset Path |
 | --- | --- | --- |
@@ -76,9 +81,9 @@ We also provide fine-tuned checkpoints for common robot platforms and benchmarks
 
 Note that all of the robotics datasets for pre-training and post-training are in LeRobot v3.0 format, paired with extra language annotations.
 
-## LeRobot Integration
+## 3. LeRobot Integration
 
-MolmoAct2 is integrated into LeRobot as a policy implementation, so users can train, evaluate, and deploy MolmoAct2 with standard LeRobot datasets and workflows. This repository includes the LeRobot integration as a Git submodule at `lerobot/`, pinned to the [`allenai/lerobot` `molmoact2-policy` branch](https://github.com/allenai/lerobot/tree/molmoact2-policy).
+MolmoAct2 is integrated into LeRobot as a policy implementation, so users can train, evaluate, and deploy MolmoAct2 with standard LeRobot datasets and workflows. This repository includes the LeRobot integration as a Git submodule at `lerobot/`, pinned to the branch [`allenai/lerobot:molmoact2-policy`](https://github.com/allenai/lerobot/tree/molmoact2-policy).
 
 For training, although all of our experiments start from the base checkpoint [`allenai/MolmoAct2`](https://huggingface.co/allenai/MolmoAct2), we recommend starting from the fine-tuned checkpoints listed in the [Finetuned Models](#finetuned-models) section above if your embodiment is similar to [Bimanual YAM](https://huggingface.co/allenai/MolmoAct2-BimanualYAM), [DROID Franka](https://huggingface.co/allenai/MolmoAct2-DROID), or [SO-100/SO-101](https://huggingface.co/allenai/MolmoAct2-SO100_101), as they can provide better initialization and downstream performance. For generic use, use the base checkpoint.
 
@@ -89,9 +94,9 @@ git submodule update --init --recursive
 cd lerobot
 ```
 
-For training, evaluation, and deployment instructions, see the MolmoAct2 LeRobot documentation at [`docs/source/molmoact2.mdx`](https://github.com/allenai/lerobot/blob/molmoact2-policy/docs/source/molmoact2.mdx). To reproduce the original LIBERO benchmark results exactly with the v0.5.1 evaluation stack, use the pinned inference branch [`allenai/lerobot:molmoact2-hf-inference`](https://github.com/allenai/lerobot/tree/molmoact2-hf-inference).
+For training, evaluation, and deployment instructions, see the MolmoAct2 LeRobot documentation at [`docs/source/molmoact2.mdx`](https://github.com/allenai/lerobot/blob/molmoact2-policy/docs/source/molmoact2.mdx). To reproduce the original LIBERO benchmark results exactly with the v0.5.1 evaluation stack, use the pinned inference branch [`allenai/lerobot:molmoact2-hf-inference`](https://github.com/allenai/lerobot/tree/molmoact2-hf-inference) with instructions in [MolmoAct2 README](https://github.com/allenai/lerobot/tree/molmoact2-hf-inference#molmoact2).
 
-## 2. Real-world Deployment
+## 4. Real-world Deployment
 
 MolmoAct2 supports out-of-the-box deployment on three robot embodiments:
 
@@ -99,9 +104,9 @@ MolmoAct2 supports out-of-the-box deployment on three robot embodiments:
 - **Bimanual YAMs**
 - **Franka DROID setup**
 
-### SO-100 Setup
+### SO-100/101 Setup
 
-For the best performance, we recommend using an **SO-100 with the standard wrist configuration** and a **third-person camera**.
+For the best performance, we recommend using an **SO-100 with the standard wrist configuration** and a **third-person camera**. Here is an open implementation by Irene Grace. [Code](https://github.com/irenegracekp/molmoact2-so101)
 
 ### Bimanual YAM Setup
 
@@ -117,7 +122,7 @@ Implementation code for setting up, data collection, and inference for Bimanual 
 
 For the Franka setup, we recommend following the official [DROID implementation](https://github.com/droid-dataset/droid) for best results.
 
-## 3. Inference Servers
+## 5. Inference Servers
 
 This repository ships two FastAPI inference servers under `examples/`, one per fine-tuned checkpoint. Each server exposes the same `/act` wire protocol — `json_numpy`-encoded request/response — but with an embodiment-specific schema (camera count, state dimension, normalisation tag).
 
@@ -205,18 +210,18 @@ sudo ufw allow from <subnet> to any port 8000 proto tcp   # DROID
 sudo ufw allow from <subnet> to any port 8202 proto tcp   # YAM
 ```
 
-## 4. Coming Soon
+## 6. Coming Soon
 
 Full code for training, fine-tuning, deployment, evaluation, and more details are coming soon.
 
-## 5. License
+## 7. License
 
 This model is licensed under Apache 2.0. It is intended for research and educational use in accordance with Ai2's [Responsible Use Guidelines](https://allenai.org/responsible-use).
 
-## 6. Model and Hardware Safety
+## 8. Model and Hardware Safety
 MolmoAct2 generate robot actions from visual observations and language instructions, but their behavior may vary across embodiments, environments, and hardware configurations. Users should carefully validate model outputs before deployment, especially when operating physical robots or other actuated systems. Where possible, actions should be monitored through interpretable intermediate outputs (adaptive depth map), simulation rollouts, action limits, or other safety checks before execution on hardware. The model’s action space should be bounded by the training data, robot controller limits, and task-specific safety constraints, including limits on speed, workspace, torque, and contact force. Users should follow the hardware manufacturer’s safety guidelines, use appropriate emergency-stop mechanisms, and operate the system only in a safely configured environment with human supervision.
 
-## 7. Contacts
+## 9. Contacts
 
 For questions, collaborations, or support, please contact with:
 ```
@@ -224,7 +229,7 @@ For questions, collaborations, or support, please contact with:
 ```
 Found a bug or have a feature request? Please open a GitHub issue.
 
-## 8. Citation
+## 10. Citation
 
 ```bibtex
 @misc{fang2026molmoact2actionreasoningmodels,
