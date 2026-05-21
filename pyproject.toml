@@ -1,7 +1,7 @@
 [project]
-name = "molmoact2-server"
-version = "0.1.0"
-description = "MolmoAct2-DROID inference server (FastAPI)"
+name = "molmoact2-policy-server"
+version = "0.1.1"
+description = "MolmoAct2 inference server (FastAPI)"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
